@@ -13,13 +13,12 @@ st.title("🎨 AI 智能服装换色器 (精准色差匹配)")
 st.write("上传一张包含模特的衣服原图，再上传多张参考颜色图，AI 将自动提取衣服并完美替换颜色。")
 
 # ==========================================
-# 模型缓存机制 (避免重复加载 u2net 模型)
+# 模型缓存机制 (懒加载，避免云端部署崩溃)
 # ==========================================
 @st.cache_resource
 def get_rembg_session():
+    """只有在真正用到时才加载 u2net 模型，且全局只加载一次"""
     return new_session("u2net")
-
-session = get_rembg_session()
 
 # ==========================================
 # 核心渲染与图像处理函数
@@ -57,6 +56,9 @@ def get_lab_metrics(img_bgr):
 
 def generate_ai_mask(orig_bgr, orig_bytes, shape):
     """【终极修复版】人体轮廓 + 肤色剔除 + 暗色剔除 + 背景剔除"""
+    # 动态获取模型 session，防止页面加载时内存溢出
+    session = get_rembg_session() 
+    
     # 1. 调用 AI 模型提取整体轮廓
     output_data = remove(orig_bytes, session=session)
     nparr = np.frombuffer(output_data, np.uint8)
@@ -131,7 +133,8 @@ if orig_file and ref_files:
     st.image(orig_rgb, width=400)
 
     if st.button("🚀 开始智能换色", type="primary"):
-        with st.spinner('正在使用 AI 提取精准衣服蒙版，请稍候...'):
+        # 温馨提示：云端首次运行需要下载模型
+        with st.spinner('正在加载 AI 模型并提取衣服蒙版（首次运行需下载模型，约需1-2分钟），请耐心稍候...'):
             try:
                 shape = orig_bgr.shape[:2]
                 mask_3d = generate_ai_mask(orig_bgr, orig_bytes, shape)
